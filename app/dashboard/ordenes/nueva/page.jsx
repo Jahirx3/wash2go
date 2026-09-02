@@ -45,27 +45,17 @@ export default function NuevaOrdenPage() {
       if (cData && cData.length > 0) setClientes(cData)
 
       // 2. Servicios
-      const { data: sData } = await supabase.from('servicios').select('*').eq('activo', true)
+      const { data: sData } = await supabase.from('servicios').select('*').eq('activo', true).order('precio')
       if (sData && sData.length > 0) {
         setServicios(sData)
-      } else {
-        // Servicios predeterminados para facilitar la prueba
-        setServicios([
-          { id: 'srv-1', nombre: 'Lavado Básico Exterior', precio: 150 },
-          { id: 'srv-2', nombre: 'Lavado Completo (Interior + Exterior)', precio: 300 },
-          { id: 'srv-3', nombre: 'Lavado Premium (Encerado + Motor)', precio: 500 },
-        ])
+        setServicioId(sData[0].id)
+        setPrecio(sData[0].precio)
       }
 
       // 3. Trabajadores
       const { data: tData } = await supabase.from('usuarios').select('*').eq('rol', 'TRABAJADOR').eq('activo', true)
       if (tData && tData.length > 0) {
         setTrabajadores(tData)
-      } else {
-        setTrabajadores([
-          { id: 'trab-1', nombre: 'Carlos Mejía' },
-          { id: 'trab-2', nombre: 'Juan Romero' }
-        ])
       }
     }
     loadData()
@@ -122,8 +112,10 @@ export default function NuevaOrdenPage() {
       toast.error('Selecciona o registra un vehículo para este cliente')
       return
     }
-    if (!servicioId) {
-      toast.error('Selecciona el servicio a realizar')
+    const isUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+
+    if (!isUUID(servicioId)) {
+      toast.error('Selecciona un servicio válido de la lista')
       return
     }
 
@@ -136,7 +128,7 @@ export default function NuevaOrdenPage() {
         cliente_id: clienteId,
         vehiculo_id: vehiculoId,
         servicio_id: servicioId,
-        trabajador_id: trabajadorId || null,
+        trabajador_id: (trabajadorId && isUUID(trabajadorId)) ? trabajadorId : null,
         estado: 'PENDIENTE',
         direccion,
         referencia,
