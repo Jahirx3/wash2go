@@ -4,19 +4,21 @@ import { NextResponse } from 'next/server'
 // RATE LIMITER EN MEMORIA (Anti-DDoS y Anti-Fuerza Bruta)
 // ============================================================
 const rateLimitMap = new Map()
-
-// Limpieza periódica para evitar fugas de memoria
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, record] of rateLimitMap.entries()) {
-    if (now - record.startTime > 60000) {
-      rateLimitMap.delete(key)
-    }
-  }
-}, 60000)
+let lastCleanup = Date.now()
 
 function checkRateLimit(ip, limit, windowMs) {
   const now = Date.now()
+
+  // Lazy cleanup (instead of setInterval which is not supported in Edge Runtime)
+  if (now - lastCleanup > 60000) {
+    lastCleanup = now
+    for (const [key, record] of rateLimitMap.entries()) {
+      if (now - record.startTime > 60000) {
+        rateLimitMap.delete(key)
+      }
+    }
+  }
+
   const record = rateLimitMap.get(ip)
 
   if (!record) {
