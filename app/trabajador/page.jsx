@@ -9,7 +9,7 @@ import {
   Navigation, Play, Check, X, LogOut, RefreshCw,
   AlertTriangle, Upload, Eye, Send, Sparkles, ExternalLink
 } from 'lucide-react'
-import { getWhatsAppUrl, generarMensajeFinalizado } from '@/lib/utils'
+import { getWhatsAppUrl, generarMensajeFinalizado, compressImage } from '@/lib/utils'
 
 export default function TrabajadorPanelPage() {
   const router = useRouter()
@@ -27,7 +27,23 @@ export default function TrabajadorPanelPage() {
       try {
         const u = JSON.parse(stored)
         setUser(u)
-        fetchMisServicios(u.id)
+        fetchMisServicios(u.id, u.rol)
+
+        // Suscripción en tiempo real: si el administrador le asigna una orden, aparece de inmediato
+        const channel = supabase
+          .channel(`trabajador_live_${u.id}`)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'ordenes' },
+            () => {
+              fetchMisServicios(u.id, u.rol)
+            }
+          )
+          .subscribe()
+
+        return () => {
+          supabase.removeChannel(channel)
+        }
       } catch {
         router.push('/login')
       }
@@ -36,10 +52,11 @@ export default function TrabajadorPanelPage() {
     }
   }, [])
 
-  const fetchMisServicios = async (trabajadorId) => {
+  const fetchMisServicios = async (trabajadorId, userRol) => {
+    if (!trabajadorId) return
     setLoading(true)
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('ordenes')
         .select(`
           *,
@@ -49,13 +66,22 @@ export default function TrabajadorPanelPage() {
         `)
         .order('created_at', { ascending: false })
 
+      // El lavador SOLO debe ver las órdenes asignadas a su cuenta personal
+      const role = userRol || user?.rol
+      if (role !== 'ADMIN') {
+        query = query.eq('trabajador_id', trabajadorId)
+      }
+
+      const { data, error } = await query
+
       if (data) {
         setServicios(data)
       } else {
         setServicios([])
       }
     } catch (err) {
-      console.error(err)
+      console.error('Error al cargar órdenes del trabajador:', err)
+      setServicios([])
     } finally {
       setLoading(false)
     }
@@ -103,10 +129,11 @@ export default function TrabajadorPanelPage() {
       const file = e.target.files[0]
       if (!file) return
 
-      const toastId = toast.loading(`Subiendo foto ${tipo}...`)
+      const toastId = toast.loading(`Optimizando y subiendo foto ${tipo}...`)
       try {
+        const optimizedFile = await compressImage(file)
         const formData = new FormData()
-        formData.append('file', file)
+        formData.append('file', optimizedFile)
         formData.append('ordenId', ordenId)
         formData.append('tipo', tipo)
 
@@ -162,7 +189,7 @@ export default function TrabajadorPanelPage() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => fetchMisServicios(user?.id)}
+              onClick={() => fetchMisServicios(user?.id, user?.rol)}
               className="p-2 bg-white/10 hover:bg-white/20 rounded-xl transition-colors"
               title="Refrescar"
             >

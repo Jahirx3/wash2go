@@ -12,7 +12,7 @@ import {
   User, RefreshCw, UserCheck, CheckCircle2, Camera, Upload,
   Image as ImageIcon, Sparkles, Trash2
 } from 'lucide-react'
-import { getTrackingUrl, getWhatsAppUrl, generarMensajeFinalizado } from '@/lib/utils'
+import { getTrackingUrl, getWhatsAppUrl, generarMensajeFinalizado, compressImage } from '@/lib/utils'
 
 export default function OrdenesPage() {
   const [ordenes, setOrdenes] = useState([])
@@ -98,10 +98,11 @@ export default function OrdenesPage() {
       const file = e.target.files[0]
       if (!file) return
       setSubiendoFoto(true)
-      const toastId = toast.loading(`Subiendo foto ${tipo}...`)
+      const toastId = toast.loading(`Optimizando y subiendo foto ${tipo}...`)
       try {
+        const optimizedFile = await compressImage(file)
         const formData = new FormData()
-        formData.append('file', file)
+        formData.append('file', optimizedFile)
         formData.append('ordenId', ordenId)
         formData.append('tipo', tipo)
 
