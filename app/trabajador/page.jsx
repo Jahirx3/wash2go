@@ -47,42 +47,10 @@ export default function TrabajadorPanelPage() {
         `)
         .order('created_at', { ascending: false })
 
-      if (data && data.length > 0) {
+      if (data) {
         setServicios(data)
       } else {
-        // Servicios de demostración para el lavador
-        setServicios([
-          {
-            id: 'demo-w1',
-            numero: 'ORD-2026-0001',
-            estado: 'PENDIENTE',
-            direccion: 'Barrio Arriba, 3ra calle, Comayagua',
-            referencia: 'Portón azul frente a pulpería',
-            hora_programada: '10:30 AM',
-            precio: 300,
-            forma_pago: 'EFECTIVO',
-            cliente: { nombre: 'Mario Aguilar', telefono: '+50498761234' },
-            vehiculo: { marca: 'Toyota', modelo: 'Hilux', placa: 'HAB-1029', color: 'Blanco', tipo: 'PICKUP' },
-            servicio: { nombre: 'Lavado Completo', duracion_min: 60 },
-            foto_antes_url: null,
-            foto_despues_url: null,
-          },
-          {
-            id: 'demo-w2',
-            numero: 'ORD-2026-0002',
-            estado: 'EN_CAMINO',
-            direccion: 'Col. San Martín, Casa 12',
-            referencia: 'Cerca del parque infantil',
-            hora_programada: '12:00 PM',
-            precio: 150,
-            forma_pago: 'TRANSFERENCIA',
-            cliente: { nombre: 'Lucía Fernández', telefono: '+50495554321' },
-            vehiculo: { marca: 'Hyundai', modelo: 'Elantra', placa: 'HAC-4432', color: 'Gris', tipo: 'SEDAN' },
-            servicio: { nombre: 'Lavado Básico', duracion_min: 30 },
-            foto_antes_url: null,
-            foto_despues_url: null,
-          }
-        ])
+        setServicios([])
       }
     } catch (err) {
       console.error(err)

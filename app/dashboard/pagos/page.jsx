@@ -1,17 +1,19 @@
 'use client'
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { DollarSign, CreditCard, Banknote, Filter, Search } from 'lucide-react'
+import { DollarSign, CreditCard, Banknote, Filter, Search, Plus, RefreshCw, CheckCircle2 } from 'lucide-react'
 
 export default function PagosPage() {
   const [ordenes, setOrdenes] = useState([])
   const [loading, setLoading] = useState(true)
   const [filtroPago, setFiltroPago] = useState('TODOS')
+  const [search, setSearch] = useState('')
 
   const fetchPagos = async () => {
     setLoading(true)
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('ordenes')
         .select(`
           id, numero, precio, forma_pago, total_cobrado, propina, estado, created_at,
@@ -19,18 +21,16 @@ export default function PagosPage() {
         `)
         .order('created_at', { ascending: false })
 
-      if (data && data.length > 0) {
-        setOrdenes(data)
-      } else {
-        setOrdenes([
-          { id: '1', numero: 'ORD-2026-0001', precio: 300, forma_pago: 'EFECTIVO', total_cobrado: 300, estado: 'FINALIZADO', cliente: { nombre: 'Mario Aguilar' } },
-          { id: '2', numero: 'ORD-2026-0002', precio: 150, forma_pago: 'TRANSFERENCIA', total_cobrado: 150, estado: 'FINALIZADO', cliente: { nombre: 'Lucía Fernández' } },
-          { id: '3', numero: 'ORD-2026-0003', precio: 500, forma_pago: 'EFECTIVO', total_cobrado: 500, estado: 'FINALIZADO', cliente: { nombre: 'Roberto Pineda' } },
-          { id: '4', numero: 'ORD-2026-0004', precio: 250, forma_pago: 'TRANSFERENCIA', total_cobrado: 250, estado: 'FINALIZADO', cliente: { nombre: 'Elena Sánchez' } },
-        ])
+      if (error) {
+        console.error('Error fetching payments:', error.message)
+        setOrdenes([])
+        return
       }
+
+      setOrdenes(data || [])
     } catch (err) {
       console.error(err)
+      setOrdenes([])
     } finally {
       setLoading(false)
     }
@@ -40,18 +40,36 @@ export default function PagosPage() {
     fetchPagos()
   }, [])
 
-  const ordenesFiltradas = ordenes.filter(o => filtroPago === 'TODOS' || o.forma_pago === filtroPago)
+  const ordenesFiltradas = ordenes.filter(o => {
+    const matchesPago = filtroPago === 'TODOS' || o.forma_pago === filtroPago
+    const matchesSearch =
+      o.numero?.toLowerCase().includes(search.toLowerCase()) ||
+      o.cliente?.nombre?.toLowerCase().includes(search.toLowerCase()) ||
+      o.forma_pago?.toLowerCase().includes(search.toLowerCase())
+    return matchesPago && matchesSearch
+  })
 
   const totalEfectivo = ordenes.filter(o => o.forma_pago === 'EFECTIVO').reduce((a, b) => a + Number(b.precio || 0), 0)
   const totalTransferencia = ordenes.filter(o => o.forma_pago === 'TRANSFERENCIA').reduce((a, b) => a + Number(b.precio || 0), 0)
-  const totalGeneral = totalEfectivo + totalTransferencia
+  const totalTarjeta = ordenes.filter(o => o.forma_pago === 'TARJETA').reduce((a, b) => a + Number(b.precio || 0), 0)
+  const totalGeneral = totalEfectivo + totalTransferencia + totalTarjeta
 
   return (
     <div className="space-y-6">
       <div className="page-header">
         <div>
           <h1 className="page-title">Caja y Métodos de Pago</h1>
-          <p className="page-subtitle">Desglose de cobros en Efectivo, Transferencias bancarias y totales</p>
+          <p className="page-subtitle">Desglose de cobros en Efectivo, Transferencias bancarias y balance de ingresos</p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button onClick={fetchPagos} className="btn-secondary text-xs !py-2">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            Actualizar Caja
+          </button>
+          <Link href="/dashboard/ordenes/nueva" className="btn-primary">
+            <Plus size={16} /> Nueva Orden
+          </Link>
         </div>
       </div>
 
@@ -67,7 +85,7 @@ export default function PagosPage() {
           <span className="text-2xl font-black text-slate-800">
             L. {totalGeneral.toLocaleString('es-HN', { minimumFractionDigits: 2 })}
           </span>
-          <span className="block text-[11px] text-slate-500 mt-1">Ingresos acumulados</span>
+          <span className="block text-[11px] text-slate-500 mt-1">{ordenes.length} órdenes registradas</span>
         </div>
 
         <div className="stat-card">
@@ -80,51 +98,65 @@ export default function PagosPage() {
           <span className="text-2xl font-black text-emerald-700">
             L. {totalEfectivo.toLocaleString('es-HN', { minimumFractionDigits: 2 })}
           </span>
-          <span className="block text-[11px] text-emerald-600 mt-1">
-            {((totalEfectivo / (totalGeneral || 1)) * 100).toFixed(0)}% del total
+          <span className="block text-[11px] text-emerald-600 font-semibold mt-1">
+            {totalGeneral > 0 ? ((totalEfectivo / totalGeneral) * 100).toFixed(0) : 0}% del total recaudado
           </span>
         </div>
 
         <div className="stat-card">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Transferencias Bancarias</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">Transferencias / Tarjeta</span>
             <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
               <CreditCard size={18} />
             </div>
           </div>
           <span className="text-2xl font-black text-blue-700">
-            L. {totalTransferencia.toLocaleString('es-HN', { minimumFractionDigits: 2 })}
+            L. {(totalTransferencia + totalTarjeta).toLocaleString('es-HN', { minimumFractionDigits: 2 })}
           </span>
-          <span className="block text-[11px] text-blue-600 mt-1">
-            {((totalTransferencia / (totalGeneral || 1)) * 100).toFixed(0)}% del total
+          <span className="block text-[11px] text-blue-600 font-semibold mt-1">
+            {totalGeneral > 0 ? (((totalTransferencia + totalTarjeta) / totalGeneral) * 100).toFixed(0) : 0}% en banco
           </span>
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="glass-card p-3 flex gap-2">
-        {['TODOS', 'EFECTIVO', 'TRANSFERENCIA', 'TARJETA'].map((p) => (
-          <button
-            key={p}
-            onClick={() => setFiltroPago(p)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              filtroPago === p
-                ? 'bg-sky-500 text-white shadow-sm'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            {p}
-          </button>
-        ))}
+      {/* Filtros y Buscador */}
+      <div className="glass-card p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full md:w-80">
+          <Search className="absolute left-3.5 top-3 text-slate-400" size={17} />
+          <input
+            type="text"
+            placeholder="Buscar por N° orden, cliente o método..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="input-field pl-10 text-xs"
+          />
+        </div>
+
+        <div className="flex gap-2">
+          {['TODOS', 'EFECTIVO', 'TRANSFERENCIA', 'TARJETA'].map((p) => (
+            <button
+              key={p}
+              onClick={() => setFiltroPago(p)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                filtroPago === p
+                  ? 'bg-sky-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Tabla */}
+      {/* Tabla de Pagos */}
       <div className="glass-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="modern-table">
             <thead>
               <tr>
                 <th>N° Orden</th>
+                <th>Fecha</th>
                 <th>Cliente</th>
                 <th>Método de Pago</th>
                 <th>Estado de la Orden</th>
@@ -132,22 +164,38 @@ export default function PagosPage() {
               </tr>
             </thead>
             <tbody>
+              {ordenesFiltradas.length === 0 && !loading && (
+                <tr>
+                  <td colSpan={6} className="py-12 text-center text-slate-500">
+                    <Banknote size={36} className="mx-auto text-slate-300 mb-2" />
+                    <p className="font-bold text-slate-700">No hay transacciones registradas</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Al crear órdenes de trabajo los cobros se reflejarán automáticamente aquí</p>
+                  </td>
+                </tr>
+              )}
               {ordenesFiltradas.map((o) => (
                 <tr key={o.id}>
                   <td className="font-mono font-bold text-sky-600 text-xs">
                     {o.numero}
                   </td>
+                  <td className="text-xs text-slate-500 font-mono">
+                    {o.created_at ? o.created_at.split('T')[0] : '-'}
+                  </td>
                   <td className="font-semibold text-slate-800 text-xs">
-                    {o.cliente?.nombre || 'General'}
+                    {o.cliente?.nombre || 'Cliente General'}
                   </td>
                   <td>
-                    <span className="badge badge-info text-[11px]">
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                      o.forma_pago === 'EFECTIVO' ? 'bg-emerald-100 text-emerald-800' :
+                      o.forma_pago === 'TRANSFERENCIA' ? 'bg-blue-100 text-blue-800' :
+                      'bg-purple-100 text-purple-800'
+                    }`}>
                       {o.forma_pago}
                     </span>
                   </td>
                   <td>
-                    <span className="text-xs text-slate-600 font-medium">
-                      {o.estado}
+                    <span className="text-xs text-slate-700 font-medium">
+                      {o.estado?.replace('_', ' ')}
                     </span>
                   </td>
                   <td className="text-right font-black text-slate-800 text-sm">

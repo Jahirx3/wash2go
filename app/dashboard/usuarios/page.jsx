@@ -27,17 +27,14 @@ export default function UsuariosPage() {
         .select('id, nombre, usuario, email, telefono, rol, activo, created_at')
         .order('created_at')
 
-      if (data && data.length > 0) {
+      if (data) {
         setUsuarios(data)
       } else {
-        setUsuarios([
-          { id: 'u-1', nombre: 'Administrador Principal', usuario: 'admin', email: 'admin@wash2go.com', telefono: '+504 9999-9999', rol: 'ADMIN', activo: true },
-          { id: 'u-2', nombre: 'Supervisor Comayagua', usuario: 'supervisor', email: 'supervisor@wash2go.com', telefono: '+504 9888-7777', rol: 'SUPERVISOR', activo: true },
-          { id: 'u-3', nombre: 'Carlos Mejía', usuario: 'carlos', email: 'carlos@wash2go.com', telefono: '+504 9911-2233', rol: 'TRABAJADOR', activo: true },
-        ])
+        setUsuarios([])
       }
     } catch (err) {
       console.error(err)
+      setUsuarios([])
     } finally {
       setLoading(false)
     }
@@ -96,7 +93,15 @@ export default function UsuariosPage() {
   const handleDeleteUsuario = async (id, nombre) => {
     if (!confirm(`¿Estás seguro de eliminar al usuario "${nombre}"? Esta acción no se puede deshacer.`)) return
     try {
-      await supabase.from('usuarios').delete().eq('id', id)
+      const { error } = await supabase.from('usuarios').delete().eq('id', id)
+      if (error) {
+        if (error.code === '23503' || error.message.includes('foreign key')) {
+          toast.error('No se puede eliminar: tiene órdenes o registros asignados. Puedes desactivar su acceso.')
+        } else {
+          toast.error(`Error al eliminar usuario: ${error.message}`)
+        }
+        return
+      }
       setUsuarios(usuarios.filter(u => u.id !== id))
       toast.success('Usuario eliminado')
     } catch (err) {

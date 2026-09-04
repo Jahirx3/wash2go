@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
-import { Bell, Search, RefreshCw } from 'lucide-react'
+import { Bell, Search, RefreshCw, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { E } from '@/lib/theme'
 
@@ -66,6 +66,30 @@ export default function Navbar() {
 
       {/* Right - Actions */}
       <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+        <a
+          href="/catalogo"
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '6px 12px',
+            fontSize: '12px',
+            fontWeight: 700,
+            color: '#0284c7',
+            background: '#f0f9ff',
+            border: '1px solid #bae6fd',
+            borderRadius: '12px',
+            textDecoration: 'none',
+            transition: 'all 0.15s'
+          }}
+          title="Abrir el catálogo público de servicios para clientes"
+        >
+          <ExternalLink size={13} />
+          <span>Ver Catálogo</span>
+        </a>
+
         {/* Notifications */}
         <button style={{ position:'relative', background:'transparent', border:'none', cursor:'pointer', padding:'8px', borderRadius:'10px', color:'#64748b', display:'flex', transition:'all 0.15s' }}
           onMouseEnter={e => { e.currentTarget.style.background='#f1f5f9'; e.currentTarget.style.color='#0ea5e9' }}

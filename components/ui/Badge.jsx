@@ -1,7 +1,8 @@
 import { getEstadoBadge } from '@/lib/theme'
 
-export default function Badge({ estado, label }) {
-  const badgeInfo = getEstadoBadge(estado)
+export default function Badge({ estado, status, label }) {
+  const currentEstado = estado || status
+  const badgeInfo = getEstadoBadge(currentEstado)
 
   return (
     <span

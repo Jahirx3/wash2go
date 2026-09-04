@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Modal from '@/components/ui/Modal'
 import toast from 'react-hot-toast'
-import { Wrench, Plus, Edit2, Clock, DollarSign, Check, X, Trash2 } from 'lucide-react'
+import { Wrench, Plus, Edit2, Clock, DollarSign, Check, X, Trash2, ExternalLink } from 'lucide-react'
 
 export default function ServiciosPage() {
   const [servicios, setServicios] = useState([])
@@ -23,42 +23,17 @@ export default function ServiciosPage() {
   const fetchServicios = async () => {
     setLoading(true)
     try {
-      const { data } = await supabase.from('servicios').select('*').order('precio')
-      if (data && data.length > 0) {
-        setServicios(data)
-      } else {
-        setServicios([
-          {
-            id: 's-1',
-            nombre: 'Lavado Básico Exterior',
-            descripcion: 'Lavado exterior con champú espumoso, rines y secado con microfibra.',
-            precio: 150,
-            duracion_min: 30,
-            activo: true,
-            color: '#0ea5e9'
-          },
-          {
-            id: 's-2',
-            nombre: 'Lavado Completo (Interior + Exterior)',
-            descripcion: 'Lavado exterior + aspirado profundo de asientos y alfombras, hidratación de plásticos.',
-            precio: 300,
-            duracion_min: 60,
-            activo: true,
-            color: '#0284c7'
-          },
-          {
-            id: 's-3',
-            nombre: 'Lavado Premium (Encerado + Motor)',
-            descripcion: 'Lavado completo + aplicación de cera protectora de alta duración y desengrase de motor.',
-            precio: 500,
-            duracion_min: 90,
-            activo: true,
-            color: '#8b5cf6'
-          },
-        ])
+      const { data, error } = await supabase.from('servicios').select('*').order('precio')
+      if (error) {
+        console.error('Error fetching services:', error.message)
+        toast.error('Error al cargar servicios de Supabase')
+        setServicios([])
+        return
       }
+      setServicios(data || [])
     } catch (err) {
       console.error(err)
+      toast.error('Error al conectar con la base de datos')
     } finally {
       setLoading(false)
     }
@@ -97,25 +72,77 @@ export default function ServiciosPage() {
     e.preventDefault()
     try {
       if (editingServicio) {
-        await supabase.from('servicios').update(formData).eq('id', editingServicio.id)
-        setServicios(servicios.map(s => s.id === editingServicio.id ? { ...s, ...formData } : s))
-        toast.success('Servicio actualizado')
+        const { error } = await supabase
+          .from('servicios')
+          .update({
+            ...formData,
+            precio: Number(formData.precio),
+            duracion_min: Number(formData.duracion_min),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingServicio.id)
+
+        if (error) {
+          toast.error(`Error al actualizar servicio: ${error.message}`)
+          return
+        }
+
+        toast.success('Servicio actualizado en el catálogo')
       } else {
-        const { data } = await supabase.from('servicios').insert([formData]).select()
-        if (data) setServicios([...servicios, data[0]])
-        else setServicios([...servicios, { id: 'temp-' + Date.now(), ...formData }])
-        toast.success('Nuevo servicio agregado al catálogo')
+        const { error } = await supabase
+          .from('servicios')
+          .insert([{
+            ...formData,
+            precio: Number(formData.precio),
+            duracion_min: Number(formData.duracion_min)
+          }])
+
+        if (error) {
+          toast.error(`Error al agregar servicio: ${error.message}`)
+          return
+        }
+
+        toast.success('Nuevo servicio registrado en la base de datos')
       }
       setModalOpen(false)
+      fetchServicios()
     } catch (err) {
-      toast.error('Error al guardar servicio')
+      toast.error('Error de conexión al guardar servicio')
+    }
+  }
+
+  const handleToggleActivo = async (id, currentActivo) => {
+    try {
+      const nuevo = !currentActivo
+      const { error } = await supabase
+        .from('servicios')
+        .update({ activo: nuevo, updated_at: new Date().toISOString() })
+        .eq('id', id)
+
+      if (error) {
+        toast.error(`Error al actualizar estado: ${error.message}`)
+        return
+      }
+
+      setServicios(servicios.map(s => s.id === id ? { ...s, activo: nuevo } : s))
+      toast.success(`Servicio ${nuevo ? 'activado' : 'pausado'}`)
+    } catch (err) {
+      toast.error('Error al cambiar estado')
     }
   }
 
   const handleDeleteServicio = async (id, nombre) => {
     if (!confirm(`¿Estás seguro de eliminar el servicio "${nombre}"?`)) return
     try {
-      await supabase.from('servicios').delete().eq('id', id)
+      const { error } = await supabase.from('servicios').delete().eq('id', id)
+      if (error) {
+        if (error.code === '23503' || error.message.includes('foreign key')) {
+          toast.error(`No se puede eliminar "${nombre}": está registrado en órdenes de clientes. Puedes pausarlo para que no aparezca en nuevas órdenes.`)
+        } else {
+          toast.error(`Error al eliminar servicio: ${error.message}`)
+        }
+        return
+      }
       setServicios(servicios.filter(s => s.id !== id))
       toast.success('Servicio eliminado')
     } catch (err) {
@@ -131,10 +158,22 @@ export default function ServiciosPage() {
           <p className="page-subtitle">Configura los paquetes de lavado, precios en Lempiras y tiempos estimados</p>
         </div>
 
-        <button onClick={() => handleOpenModal()} className="btn-primary">
-          <Plus size={18} />
-          Nuevo Servicio
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="/catalogo"
+            target="_blank"
+            rel="noreferrer"
+            className="btn-secondary text-xs flex items-center gap-1.5"
+            title="Abrir el catálogo digital público de clientes"
+          >
+            <ExternalLink size={14} />
+            Ver Catálogo de Clientes
+          </a>
+          <button onClick={() => handleOpenModal()} className="btn-primary">
+            <Plus size={18} />
+            Nuevo Servicio
+          </button>
+        </div>
       </div>
 
       {/* Grid de Servicios */}
@@ -150,15 +189,18 @@ export default function ServiciosPage() {
             />
 
             <div className="space-y-3">
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-2">
                 <h3 className="text-base font-extrabold text-slate-800">{s.nombre}</h3>
-                <span
-                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                    s.activo ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                <button
+                  type="button"
+                  onClick={() => handleToggleActivo(s.id, s.activo)}
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full transition-colors cursor-pointer shrink-0 ${
+                    s.activo ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-rose-100 text-rose-700 hover:bg-rose-200'
                   }`}
+                  title="Clic para alternar entre Activo y Pausado"
                 >
-                  {s.activo ? 'Activo' : 'Pausado'}
-                </span>
+                  {s.activo ? '● Activo' : '⏸ Pausado'}
+                </button>
               </div>
 
               <p className="text-xs text-slate-500 leading-relaxed min-h-[36px]">

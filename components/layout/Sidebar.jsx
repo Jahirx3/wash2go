@@ -23,7 +23,6 @@ const NAV_SECTIONS = [
     items: [
       { path: '/dashboard/ordenes', label: 'Órdenes', icon: ClipboardList, roles: ['ADMIN', 'SUPERVISOR'] },
       { path: '/dashboard/ordenes/nueva', label: 'Nueva Orden', icon: PlusCircle, roles: ['ADMIN', 'SUPERVISOR'] },
-      { path: '/dashboard/whatsapp-bot', label: 'Bot WhatsApp', icon: MessageSquare, roles: ['ADMIN', 'SUPERVISOR'] },
       { path: '/dashboard/trabajadores', label: 'Trabajadores', icon: Truck, roles: ['ADMIN', 'SUPERVISOR'] },
     ]
   },

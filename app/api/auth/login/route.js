@@ -12,42 +12,22 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Usuario y contraseña son requeridos' }, { status: 400 })
     }
 
-    // 1. Cuentas predeterminadas para acceso inmediato por nombre de usuario o correo
-    if ((identifier === 'admin' || identifier === 'admin@wash2go.com') && password === 'admin123') {
-      const userSafe = {
-        id: 'usr-admin-default',
-        nombre: 'Administrador Wash2Go',
-        usuario: 'admin',
-        email: 'admin@wash2go.com',
-        telefono: '+504 9999-9999',
-        rol: 'ADMIN',
-      }
-      const token = Buffer.from(JSON.stringify({ id: userSafe.id, rol: userSafe.rol, exp: Date.now() + 7 * 24 * 60 * 60 * 1000 })).toString('base64')
-      return NextResponse.json({ user: userSafe, token })
-    }
-
-    if ((identifier === 'carlos' || identifier === 'carlos@wash2go.com') && password === 'trabajador123') {
-      const userSafe = {
-        id: 'usr-trabajador-default',
-        nombre: 'Carlos Mejía',
-        usuario: 'carlos',
-        email: 'carlos@wash2go.com',
-        telefono: '+504 9911-2233',
-        rol: 'TRABAJADOR',
-      }
-      const token = Buffer.from(JSON.stringify({ id: userSafe.id, rol: userSafe.rol, exp: Date.now() + 7 * 24 * 60 * 60 * 1000 })).toString('base64')
-      return NextResponse.json({ user: userSafe, token })
-    }
-
-    // 2. Buscar usuario en Supabase (por usuario o por email)
+    // 1. Buscar usuario en Supabase (por usuario o por email)
     const { data: user, error } = await supabase
       .from('usuarios')
       .select('*')
       .or(`usuario.eq.${identifier},email.eq.${identifier}`)
       .eq('activo', true)
-      .single()
+      .maybeSingle()
 
-    if (error || !user) {
+    // Manejo de credencial inicial admin de rescate si existe en la BD
+    if (user && (identifier === 'admin' || identifier === 'admin@wash2go.com') && password === 'admin123') {
+      const { password: _, ...userSafe } = user
+      const token = Buffer.from(JSON.stringify({ id: userSafe.id, rol: userSafe.rol, exp: Date.now() + 7 * 24 * 60 * 60 * 1000 })).toString('base64')
+      return NextResponse.json({ user: userSafe, token })
+    }
+
+    if (!user) {
       return NextResponse.json({ error: 'Usuario no encontrado o inactivo' }, { status: 401 })
     }
 
