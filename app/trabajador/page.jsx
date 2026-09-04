@@ -7,8 +7,9 @@ import toast, { Toaster } from 'react-hot-toast'
 import {
   Car, MapPin, Clock, Phone, Camera, CheckCircle2,
   Navigation, Play, Check, X, LogOut, RefreshCw,
-  AlertTriangle, Upload, Eye
+  AlertTriangle, Upload, Eye, Send, Sparkles, ExternalLink
 } from 'lucide-react'
+import { getWhatsAppUrl, generarMensajeFinalizado } from '@/lib/utils'
 
 export default function TrabajadorPanelPage() {
   const router = useRouter()
@@ -17,6 +18,7 @@ export default function TrabajadorPanelPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('ACTIVOS') // 'ACTIVOS' | 'HISTORIAL'
   const [mounted, setMounted] = useState(false)
+  const [finalizadoModalOrden, setFinalizadoModalOrden] = useState(null)
 
   useEffect(() => {
     setMounted(true)
@@ -64,17 +66,33 @@ export default function TrabajadorPanelPage() {
     try {
       const { error } = await supabase
         .from('ordenes')
-        .update({ estado: nuevoEstado })
+        .update({
+          estado: nuevoEstado,
+          updated_at: new Date().toISOString()
+        })
         .eq('id', ordenId)
 
-      setServicios(servicios.map(s => s.id === ordenId ? { ...s, estado: nuevoEstado } : s))
+      if (error) {
+        toast.error(`Error al actualizar estado: ${error.message}`)
+        return
+      }
+
+      const updated = servicios.map(s => s.id === ordenId ? { ...s, estado: nuevoEstado } : s)
+      setServicios(updated)
       toast.success(`Servicio actualizado: ${nuevoEstado.replace('_', ' ')}`)
+
+      if (nuevoEstado === 'FINALIZADO') {
+        const finished = updated.find(s => s.id === ordenId)
+        if (finished && finished.cliente?.telefono) {
+          setFinalizadoModalOrden(finished)
+        }
+      }
     } catch (err) {
       toast.error('Error al actualizar')
     }
   }
 
-  // Simulación de captura y subida de foto
+  // Subida de foto a Supabase Storage mediante API segura
   const handleTomarFoto = async (ordenId, tipo) => {
     const input = document.createElement('input')
     input.type = 'file'
@@ -87,26 +105,30 @@ export default function TrabajadorPanelPage() {
 
       const toastId = toast.loading(`Subiendo foto ${tipo}...`)
       try {
-        // En una app real se sube a Supabase Storage bucket 'fotos-wash2go'
-        // Creamos preview local para respuesta inmediata
-        const reader = new FileReader()
-        reader.onload = async (event) => {
-          const base64Url = event.target.result
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('ordenId', ordenId)
+        formData.append('tipo', tipo)
 
-          const updateObj = tipo === 'antes'
-            ? { foto_antes_url: base64Url }
-            : { foto_despues_url: base64Url }
-
-          await supabase.from('ordenes').update(updateObj).eq('id', ordenId)
-
-          setServicios(servicios.map(s => s.id === ordenId ? { ...s, ...updateObj } : s))
-          toast.dismiss(toastId)
-          toast.success(`Foto ${tipo} guardada con éxito 📸`)
+        const res = await fetch('/api/upload-foto', {
+          method: 'POST',
+          body: formData,
+        })
+        const result = await res.json()
+        if (!res.ok || !result.success) {
+          throw new Error(result.error || 'Error al subir foto')
         }
-        reader.readAsDataURL(file)
+
+        const updateObj = tipo === 'antes'
+          ? { foto_antes_url: result.url }
+          : { foto_despues_url: result.url }
+
+        setServicios(prev => prev.map(s => s.id === ordenId ? { ...s, ...updateObj } : s))
+        toast.dismiss(toastId)
+        toast.success(`Foto ${tipo} guardada con éxito 📸`)
       } catch (err) {
         toast.dismiss(toastId)
-        toast.error('Error al subir foto')
+        toast.error(`Error al subir foto: ${err.message}`)
       }
     }
     input.click()
@@ -242,7 +264,7 @@ export default function TrabajadorPanelPage() {
                   </div>
                   {orden.cliente?.telefono && (
                     <a
-                      href={`https://wa.me/${orden.cliente?.telefono.replace(/[^0-9]/g, '')}`}
+                      href={getWhatsAppUrl(orden.cliente.telefono, `¡Hola ${orden.cliente.nombre}! Te saluda tu lavador de Wash2Go con respecto a tu orden ${orden.numero}.`)}
                       target="_blank"
                       rel="noreferrer"
                       className="text-emerald-600 font-bold flex items-center gap-1 hover:underline"
@@ -254,32 +276,81 @@ export default function TrabajadorPanelPage() {
               </div>
 
               {/* Visualización de Fotos Tomadas */}
-              {(orden.foto_antes_url || orden.foto_despues_url) && (
-                <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Foto Antes</span>
-                    {orden.foto_antes_url ? (
-                      <img src={orden.foto_antes_url} alt="Antes" className="w-full h-24 object-cover rounded-lg border border-slate-200" />
-                    ) : (
-                      <div className="h-24 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 text-[11px]">
-                        Sin foto
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Foto Después</span>
-                    {orden.foto_despues_url ? (
-                      <img src={orden.foto_despues_url} alt="Después" className="w-full h-24 object-cover rounded-lg border border-slate-200" />
-                    ) : (
-                      <div className="h-24 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 text-[11px]">
-                        Sin foto
-                      </div>
-                    )}
+              <div className="grid grid-cols-2 gap-2 text-center text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Foto Antes</span>
+                  {orden.foto_antes_url ? (
+                    <div className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-video bg-slate-900">
+                      <img src={orden.foto_antes_url} alt="Antes" className="w-full h-full object-cover" />
+                      <a
+                        href={orden.foto_antes_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold"
+                      >
+                        Ver foto
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="h-20 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 text-[11px] border border-dashed border-slate-200">
+                      Sin foto antes
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase font-bold block mb-1">Foto Después</span>
+                  {orden.foto_despues_url ? (
+                    <div className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-video bg-slate-900">
+                      <img src={orden.foto_despues_url} alt="Después" className="w-full h-full object-cover" />
+                      <a
+                        href={orden.foto_despues_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[10px] font-bold"
+                      >
+                        Ver foto
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="h-20 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 text-[11px] border border-dashed border-slate-200">
+                      Sin foto después
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Botón de Enviar Comprobante y Fotos por WhatsApp (Visible cuando está Finalizado) */}
+              {orden.estado === 'FINALIZADO' && orden.cliente?.telefono && (
+                <div className="pt-2 border-t border-slate-200 space-y-2">
+                  <a
+                    href={getWhatsAppUrl(orden.cliente.telefono, generarMensajeFinalizado(orden))}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-sm active:scale-98 transition-all"
+                  >
+                    <Send size={15} />
+                    Enviar Fotos y Comprobante por WhatsApp
+                  </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => handleTomarFoto(orden.id, 'antes')}
+                      className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-[11px] flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <Camera size={13} />
+                      {orden.foto_antes_url ? 'Cambiar Foto Antes' : 'Foto Antes'}
+                    </button>
+                    <button
+                      onClick={() => handleTomarFoto(orden.id, 'despues')}
+                      className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-[11px] flex items-center justify-center gap-1 transition-colors"
+                    >
+                      <Camera size={13} />
+                      {orden.foto_despues_url ? 'Cambiar Foto Después' : 'Foto Después'}
+                    </button>
                   </div>
                 </div>
               )}
 
-              {/* Botones de Acción del Lavador */}
+              {/* Botones de Acción del Lavador mientras el servicio está activo */}
               {orden.estado !== 'FINALIZADO' && orden.estado !== 'CANCELADO' && (
                 <div className="space-y-2 pt-2 border-t border-slate-200">
                   {/* Botón En Camino */}
@@ -311,14 +382,14 @@ export default function TrabajadorPanelPage() {
                       className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Camera size={15} />
-                      Foto Antes
+                      {orden.foto_antes_url ? 'Cambiar Foto Antes' : 'Foto Antes'}
                     </button>
                     <button
                       onClick={() => handleTomarFoto(orden.id, 'despues')}
                       className="py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Camera size={15} />
-                      Foto Después
+                      {orden.foto_despues_url ? 'Cambiar Foto Después' : 'Foto Después'}
                     </button>
                   </div>
 
@@ -338,6 +409,58 @@ export default function TrabajadorPanelPage() {
           ))
         )}
       </main>
+
+      {/* Modal emergente al finalizar servicio para enviar WhatsApp al cliente */}
+      {finalizadoModalOrden && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl text-center">
+            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 size={32} />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-slate-800">¡Servicio Finalizado!</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                La orden <span className="font-mono font-bold text-slate-700">{finalizadoModalOrden.numero}</span> ha sido completada exitosamente.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-2xl text-left text-xs space-y-1.5 border border-slate-100">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Cliente:</span>
+                <span className="font-bold text-slate-800">{finalizadoModalOrden.cliente?.nombre}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Vehículo:</span>
+                <span className="font-bold text-slate-800">{finalizadoModalOrden.vehiculo?.marca} {finalizadoModalOrden.vehiculo?.modelo} ({finalizadoModalOrden.vehiculo?.placa})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Total Cobrado:</span>
+                <span className="font-bold text-emerald-600 text-sm">L. {Number(finalizadoModalOrden.precio || 0).toFixed(2)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-1">
+              <a
+                href={getWhatsAppUrl(finalizadoModalOrden.cliente?.telefono, generarMensajeFinalizado(finalizadoModalOrden))}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => setFinalizadoModalOrden(null)}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all"
+              >
+                <Send size={15} />
+                Enviar Fotos y Comprobante por WhatsApp
+              </a>
+              <button
+                type="button"
+                onClick={() => setFinalizadoModalOrden(null)}
+                className="w-full py-2 text-xs font-semibold text-slate-500 hover:text-slate-700"
+              >
+                Cerrar sin enviar ahora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

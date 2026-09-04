@@ -4,7 +4,8 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
   CheckCircle2, Clock, Navigation, Droplets,
-  Star, Phone, Car, MapPin, ShieldCheck, Heart
+  Star, Phone, Car, MapPin, ShieldCheck, Heart,
+  Camera, Sparkles, ExternalLink
 } from 'lucide-react'
 import toast, { Toaster } from 'react-hot-toast'
 
@@ -201,6 +202,98 @@ export default function PublicTrackingPage() {
             </div>
           </div>
         </div>
+
+        {/* Fotos de Evidencia Antes y Después para el Cliente */}
+        {(orden?.foto_antes_url || orden?.foto_despues_url || orden?.estado === 'LAVANDO' || orden?.estado === 'FINALIZADO') && (
+          <div className="p-6 border-t border-slate-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                <Camera size={14} className="text-sky-600" /> Fotos de tu Vehículo
+              </h3>
+              <span className="text-[11px] text-sky-600 font-semibold">
+                {orden?.estado === 'FINALIZADO' ? '✨ Servicio completado' : '📸 En proceso'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Card Foto Antes */}
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500"></span> Antes del Lavado
+                  </span>
+                  {orden?.foto_antes_url && (
+                    <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.5 rounded">
+                      Inicial
+                    </span>
+                  )}
+                </div>
+
+                {orden?.foto_antes_url ? (
+                  <div className="relative group rounded-xl overflow-hidden aspect-video bg-slate-900 border border-slate-200 shadow-sm">
+                    <img
+                      src={orden.foto_antes_url}
+                      alt="Estado Inicial"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <a
+                      href={orden.foto_antes_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1"
+                    >
+                      <ExternalLink size={14} /> Ver en tamaño completo
+                    </a>
+                  </div>
+                ) : (
+                  <div className="aspect-video bg-white rounded-xl border border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 p-3 text-center">
+                    <Camera size={22} className="text-slate-300 mb-1" />
+                    <span className="text-xs">Foto previa pendiente de captura</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Card Foto Después */}
+              <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Resultado Impecable
+                  </span>
+                  {orden?.foto_despues_url && (
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                      Final
+                    </span>
+                  )}
+                </div>
+
+                {orden?.foto_despues_url ? (
+                  <div className="relative group rounded-xl overflow-hidden aspect-video bg-slate-900 border border-slate-200 shadow-sm">
+                    <img
+                      src={orden.foto_despues_url}
+                      alt="Resultado Final"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <a
+                      href={orden.foto_despues_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1"
+                    >
+                      <ExternalLink size={14} /> Ver en tamaño completo
+                    </a>
+                  </div>
+                ) : (
+                  <div className="aspect-video bg-white rounded-xl border border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 p-3 text-center">
+                    <Sparkles size={22} className="text-slate-300 mb-1" />
+                    <span className="text-xs">
+                      {orden?.estado === 'FINALIZADO' ? 'Sin foto final' : 'Se tomará al terminar el lavado'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Módulo de Calificación si está Finalizado */}
         {orden?.estado === 'FINALIZADO' && !calificado && (

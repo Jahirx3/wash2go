@@ -9,9 +9,10 @@ import {
   Plus, Search, Filter, Eye, Phone, MapPin,
   Car, Calendar, Clock, Printer, CheckCircle,
   XCircle, Truck, Droplets, ExternalLink, Copy, Send,
-  User, RefreshCw, UserCheck, CheckCircle2
+  User, RefreshCw, UserCheck, CheckCircle2, Camera, Upload,
+  Image as ImageIcon, Sparkles, Trash2
 } from 'lucide-react'
-import { getTrackingUrl } from '@/lib/utils'
+import { getTrackingUrl, getWhatsAppUrl, generarMensajeFinalizado } from '@/lib/utils'
 
 export default function OrdenesPage() {
   const [ordenes, setOrdenes] = useState([])
@@ -86,6 +87,50 @@ export default function OrdenesPage() {
     }
   }, [])
 
+  const [subiendoFoto, setSubiendoFoto] = useState(false)
+
+  // Subir o reemplazar foto antes/después desde el panel administrativo
+  const handleSubirFoto = (ordenId, tipo) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.onchange = async (e) => {
+      const file = e.target.files[0]
+      if (!file) return
+      setSubiendoFoto(true)
+      const toastId = toast.loading(`Subiendo foto ${tipo}...`)
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('ordenId', ordenId)
+        formData.append('tipo', tipo)
+
+        const res = await fetch('/api/upload-foto', {
+          method: 'POST',
+          body: formData,
+        })
+        const result = await res.json()
+        if (!res.ok || !result.success) {
+          throw new Error(result.error || 'Error al subir foto')
+        }
+
+        const updateObj = tipo === 'antes' ? { foto_antes_url: result.url } : { foto_despues_url: result.url }
+        setOrdenes(prev => prev.map(o => o.id === ordenId ? { ...o, ...updateObj } : o))
+        if (selectedOrden?.id === ordenId) {
+          setSelectedOrden(prev => ({ ...prev, ...updateObj }))
+        }
+        toast.dismiss(toastId)
+        toast.success(`Foto ${tipo} guardada con éxito 📸`)
+      } catch (err) {
+        toast.dismiss(toastId)
+        toast.error(`Error al subir foto: ${err.message}`)
+      } finally {
+        setSubiendoFoto(false)
+      }
+    }
+    input.click()
+  }
+
   // Cambiar estado rápido
   const cambiarEstado = async (id, nuevoEstado) => {
     try {
@@ -106,7 +151,12 @@ export default function OrdenesPage() {
       if (selectedOrden?.id === id) {
         setSelectedOrden({ ...selectedOrden, estado: nuevoEstado })
       }
-      toast.success(`Estado cambiado a ${nuevoEstado.replace('_', ' ')}`)
+
+      if (nuevoEstado === 'FINALIZADO') {
+        toast.success(`¡Orden finalizada con éxito! 🎉 Comprobante y fotos listos para enviar al cliente por WhatsApp.`, { duration: 5000 })
+      } else {
+        toast.success(`Estado cambiado a ${nuevoEstado.replace('_', ' ')}`)
+      }
     } catch (err) {
       toast.error('Error al cambiar estado')
     }
@@ -137,6 +187,36 @@ export default function OrdenesPage() {
       toast.success(nuevoTrabajadorId ? `Lavador asignado con éxito` : 'Lavador desasignado')
     } catch (err) {
       toast.error('Error al asignar lavador')
+    }
+  }
+
+  // Eliminar orden de trabajo
+  const handleDeleteOrden = async (id, numero) => {
+    if (!confirm(`¿Estás seguro de eliminar permanentemente la orden "${numero}"? Esta acción no se puede deshacer.`)) {
+      return
+    }
+
+    const toastId = toast.loading('Eliminando orden...')
+    try {
+      const { error } = await supabase
+        .from('ordenes')
+        .delete()
+        .eq('id', id)
+
+      if (error) {
+        throw new Error(error.message)
+      }
+
+      setOrdenes(prev => prev.filter(o => o.id !== id))
+      if (selectedOrden?.id === id) {
+        setModalOpen(false)
+        setSelectedOrden(null)
+      }
+      toast.dismiss(toastId)
+      toast.success(`Orden ${numero} eliminada exitosamente`)
+    } catch (err) {
+      toast.dismiss(toastId)
+      toast.error(`Error al eliminar la orden: ${err.message}`)
     }
   }
 
@@ -251,9 +331,22 @@ export default function OrdenesPage() {
                   </td>
                   <td>
                     <span className="font-bold text-slate-800 block text-xs">{orden.cliente?.nombre || 'Cliente General'}</span>
-                    <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                      <Phone size={10} /> {orden.cliente?.telefono || 'Sin teléfono'}
-                    </span>
+                    {orden.cliente?.telefono ? (
+                      <a
+                        href={getWhatsAppUrl(orden.cliente.telefono, `¡Hola ${orden.cliente.nombre}! Te escribimos de Wash2Go con respecto a tu orden ${orden.numero}.`)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 hover:underline"
+                        title="Contactar al cliente por WhatsApp"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Phone size={10} /> {orden.cliente.telefono}
+                      </a>
+                    ) : (
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                        <Phone size={10} /> Sin teléfono
+                      </span>
+                    )}
                   </td>
                   <td>
                     <span className="text-xs font-semibold text-slate-700 block">
@@ -297,16 +390,25 @@ export default function OrdenesPage() {
                     <Badge status={orden.estado} />
                   </td>
                   <td className="sticky-right text-center">
-                    <button
-                      onClick={() => {
-                        setSelectedOrden(orden)
-                        setModalOpen(true)
-                      }}
-                      className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
-                      title="Ver Detalle / Asignar Lavador / Imprimir"
-                    >
-                      <Eye size={15} /> Detalle
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => {
+                          setSelectedOrden(orden)
+                          setModalOpen(true)
+                        }}
+                        className="p-1.5 text-slate-500 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors inline-flex items-center gap-1 text-xs font-semibold"
+                        title="Ver Detalle / Asignar Lavador / Imprimir"
+                      >
+                        <Eye size={15} /> Detalle
+                      </button>
+                      <button
+                        onClick={() => handleDeleteOrden(orden.id, orden.numero)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors inline-flex items-center"
+                        title="Eliminar orden"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -349,9 +451,22 @@ export default function OrdenesPage() {
                 <div className="bg-slate-50 p-3.5 rounded-xl space-y-1.5 border border-slate-200/60">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Datos del Cliente:</span>
                   <p className="text-sm font-bold text-slate-900">{selectedOrden.cliente?.nombre || 'Cliente General'}</p>
-                  <p className="text-slate-600 flex items-center gap-1">
-                    <Phone size={12} className="text-emerald-600" /> {selectedOrden.cliente?.telefono || 'Sin teléfono'}
-                  </p>
+                  <div className="flex items-center justify-between pt-0.5">
+                    <span className="text-slate-600 flex items-center gap-1">
+                      <Phone size={12} className="text-emerald-600" /> {selectedOrden.cliente?.telefono || 'Sin teléfono'}
+                    </span>
+                    {selectedOrden.cliente?.telefono && (
+                      <a
+                        href={getWhatsAppUrl(selectedOrden.cliente.telefono, `¡Hola ${selectedOrden.cliente.nombre}! Te escribimos de Wash2Go con respecto a tu orden ${selectedOrden.numero}.`)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
+                        title="Contactar al cliente por WhatsApp"
+                      >
+                        <Phone size={11} /> Contactar
+                      </a>
+                    )}
+                  </div>
                   <p className="text-slate-700 flex items-start gap-1 pt-1 border-t border-slate-200/50">
                     <MapPin size={12} className="text-rose-500 mt-0.5 shrink-0" />
                     <span>{selectedOrden.direccion || 'Comayagua'}</span>
@@ -425,6 +540,37 @@ export default function OrdenesPage() {
                 </div>
               </div>
 
+              {/* Evidencia Fotográfica en Documento Impreso */}
+              {(selectedOrden.foto_antes_url || selectedOrden.foto_despues_url) && (
+                <div className="pt-4 border-t border-slate-200">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                    Evidencia Fotográfica del Vehículo:
+                  </span>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-bold block mb-1">Estado Inicial (Antes)</span>
+                      {selectedOrden.foto_antes_url ? (
+                        <img src={selectedOrden.foto_antes_url} alt="Antes" className="w-full h-36 object-cover rounded-lg border border-slate-200" />
+                      ) : (
+                        <div className="h-36 bg-slate-50 border border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs">
+                          Sin foto inicial
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-500 font-bold block mb-1">Resultado Final (Después)</span>
+                      {selectedOrden.foto_despues_url ? (
+                        <img src={selectedOrden.foto_despues_url} alt="Después" className="w-full h-36 object-cover rounded-lg border border-slate-200" />
+                      ) : (
+                        <div className="h-36 bg-slate-50 border border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-400 text-xs">
+                          Sin foto final
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Casillas de Firmas Oficiales para la Impresión / PDF */}
               <div className="hidden print:grid grid-cols-2 gap-12 pt-10 text-center text-xs">
                 <div>
@@ -491,6 +637,156 @@ export default function OrdenesPage() {
                 </div>
               </div>
 
+              {/* Sección Interactiva: Evidencia Fotográfica (Antes y Después) */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/60 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Camera size={16} className="text-sky-600" />
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Evidencia Fotográfica (Antes y Después)
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-500">
+                    Visible para el cliente en su enlace en vivo
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Foto Antes */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-500"></span> Foto Antes
+                      </span>
+                      {selectedOrden.foto_antes_url && (
+                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                          Registrada
+                        </span>
+                      )}
+                    </div>
+
+                    {selectedOrden.foto_antes_url ? (
+                      <div className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-video bg-slate-900">
+                        <img
+                          src={selectedOrden.foto_antes_url}
+                          alt="Foto Antes"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <a
+                          href={selectedOrden.foto_antes_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1"
+                        >
+                          <ExternalLink size={14} /> Ver en Alta Resolución
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="aspect-video bg-slate-100 rounded-lg border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 gap-1 p-3 text-center">
+                        <ImageIcon size={24} className="text-slate-300" />
+                        <span className="text-xs font-medium">Aún no se ha tomado foto del estado inicial</span>
+                      </div>
+                    )}
+
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSubirFoto(selectedOrden.id, 'antes')}
+                        disabled={subiendoFoto}
+                        className="w-full btn-secondary text-xs !py-1.5 flex items-center justify-center gap-1.5 hover:bg-sky-50 hover:text-sky-700 hover:border-sky-300"
+                      >
+                        <Camera size={13} />
+                        {selectedOrden.foto_antes_url ? 'Cambiar Foto Antes' : 'Subir Foto Antes'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Foto Después */}
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Foto Después (Resultado)
+                      </span>
+                      {selectedOrden.foto_despues_url && (
+                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                          Registrada
+                        </span>
+                      )}
+                    </div>
+
+                    {selectedOrden.foto_despues_url ? (
+                      <div className="relative group rounded-lg overflow-hidden border border-slate-200 aspect-video bg-slate-900">
+                        <img
+                          src={selectedOrden.foto_despues_url}
+                          alt="Foto Después"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <a
+                          href={selectedOrden.foto_despues_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1"
+                        >
+                          <ExternalLink size={14} /> Ver en Alta Resolución
+                        </a>
+                      </div>
+                    ) : (
+                      <div className="aspect-video bg-slate-100 rounded-lg border border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 gap-1 p-3 text-center">
+                        <Sparkles size={24} className="text-slate-300" />
+                        <span className="text-xs font-medium">Aún no se ha tomado foto del resultado final</span>
+                      </div>
+                    )}
+
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleSubirFoto(selectedOrden.id, 'despues')}
+                        disabled={subiendoFoto}
+                        className="w-full btn-secondary text-xs !py-1.5 flex items-center justify-center gap-1.5 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300"
+                      >
+                        <Camera size={13} />
+                        {selectedOrden.foto_despues_url ? 'Cambiar Foto Después' : 'Subir Foto Después'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botón Principal: Enviar Comprobante y Fotos por WhatsApp al Cliente */}
+              {selectedOrden.cliente?.telefono && (
+                <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                  selectedOrden.estado === 'FINALIZADO'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-md'
+                    : 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                }`}>
+                  <div>
+                    <span className={`text-xs font-black uppercase tracking-wider flex items-center gap-1.5 ${
+                      selectedOrden.estado === 'FINALIZADO' ? 'text-white' : 'text-emerald-900'
+                    }`}>
+                      <Send size={15} />
+                      {selectedOrden.estado === 'FINALIZADO' ? '¡Orden Finalizada! Envío al Cliente' : 'Enviar Comprobante y Fotos al Cliente'}
+                    </span>
+                    <p className={`text-xs mt-0.5 ${
+                      selectedOrden.estado === 'FINALIZADO' ? 'text-emerald-100' : 'text-emerald-700'
+                    }`}>
+                      Envía comprobante, total, enlace de seguimiento y fotos a WhatsApp ({selectedOrden.cliente.telefono})
+                    </p>
+                  </div>
+                  <a
+                    href={getWhatsAppUrl(selectedOrden.cliente.telefono, generarMensajeFinalizado(selectedOrden))}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`btn-primary text-xs font-bold whitespace-nowrap flex items-center justify-center gap-2 !py-2.5 !px-5 ${
+                      selectedOrden.estado === 'FINALIZADO'
+                        ? '!bg-white !text-emerald-800 hover:!bg-emerald-50 shadow-lg'
+                        : '!bg-emerald-600 hover:!bg-emerald-700 !text-white'
+                    }`}
+                  >
+                    <Send size={14} /> Enviar Comprobante y Fotos por WhatsApp
+                  </a>
+                </div>
+              )}
+
               {/* Enlace de Tracking para el Cliente */}
               <div className="bg-sky-50 border border-sky-200 p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -512,7 +808,7 @@ export default function OrdenesPage() {
                   </button>
                   {selectedOrden.cliente?.telefono && (
                     <a
-                      href={`https://wa.me/${selectedOrden.cliente.telefono.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`¡Hola ${selectedOrden.cliente.nombre}! 🚗💦 Puedes seguir el estado de tu lavado en vivo aquí:\n${getTrackingUrl(selectedOrden.numero)}`)}`}
+                      href={getWhatsAppUrl(selectedOrden.cliente.telefono, `¡Hola ${selectedOrden.cliente.nombre}! 🚗💦 Puedes seguir el estado de tu lavado en vivo aquí:\n${getTrackingUrl(selectedOrden.numero)}`)}
                       target="_blank"
                       rel="noreferrer"
                       className="btn-secondary !py-1.5 !px-2.5 text-xs text-emerald-700 border-emerald-300 hover:bg-emerald-50 bg-emerald-50/50"
@@ -532,13 +828,22 @@ export default function OrdenesPage() {
               </div>
 
               {/* Botones de acción del modal */}
-              <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-                <button
-                  onClick={handleImprimir}
-                  className="btn-secondary text-xs !py-2.5 flex items-center gap-2 bg-slate-800 text-white hover:bg-slate-900 border-slate-800"
-                >
-                  <Printer size={16} /> Imprimir / Guardar en PDF
-                </button>
+              <div className="flex flex-wrap justify-between items-center gap-2 pt-2 border-t border-slate-200">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleImprimir}
+                    className="btn-secondary text-xs !py-2.5 flex items-center gap-2 bg-slate-800 text-white hover:bg-slate-900 border-slate-800"
+                  >
+                    <Printer size={16} /> Imprimir / PDF
+                  </button>
+                  <button
+                    onClick={() => handleDeleteOrden(selectedOrden.id, selectedOrden.numero)}
+                    className="btn-secondary text-xs !py-2.5 text-rose-600 border-rose-200 hover:bg-rose-50 hover:border-rose-300 flex items-center gap-1.5"
+                    title="Eliminar esta orden permanentemente"
+                  >
+                    <Trash2 size={15} /> Eliminar Orden
+                  </button>
+                </div>
                 <button
                   onClick={() => setModalOpen(false)}
                   className="btn-primary text-xs !py-2"

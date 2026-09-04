@@ -159,6 +159,45 @@ function NuevaOrdenContent() {
         .single()
 
       if (error) {
+        // Manejar teléfono ya existente en la base de datos (clave única)
+        if (error.code === '23505' || error.message?.includes('clientes_telefono_key')) {
+          const rawPhone = clienteForm.telefono.trim()
+          const digits = rawPhone.replace(/[^0-9]/g, '')
+
+          // Buscar cliente existente por teléfono exacto o dígitos coincidentes
+          const { data: allClients } = await supabase.from('clientes').select('*')
+          const existing = allClients?.find(c => {
+            if (!c.telefono) return false
+            const cDigits = c.telefono.replace(/[^0-9]/g, '')
+            return c.telefono === rawPhone || cDigits === digits || (digits.length >= 8 && cDigits.endsWith(digits)) || (cDigits.length >= 8 && digits.endsWith(cDigits))
+          })
+
+          if (existing) {
+            toast.success(`El teléfono ya está registrado a nombre de "${existing.nombre}". Se seleccionó automáticamente.`, { duration: 5000 })
+            setClientes(prev => prev.some(c => c.id === existing.id) ? prev : [existing, ...prev])
+            setClienteId(existing.id)
+            if (existing.direccion_default) {
+              setDireccion(existing.direccion_default)
+            }
+            setNuevoClienteModal(false)
+            setClienteForm({ nombre: '', telefono: '', email: '', direccion_default: '', notas: '' })
+
+            // Cargar vehículos activos del cliente existente
+            const { data: clientVehs } = await supabase
+              .from('vehiculos')
+              .select('*')
+              .eq('cliente_id', existing.id)
+              .eq('activo', true)
+
+            if (clientVehs && clientVehs.length > 0) {
+              setVehiculos(clientVehs)
+              setVehiculoId(clientVehs[0].id)
+            } else {
+              setNuevoVehiculoModal(true)
+            }
+            return
+          }
+        }
         toast.error(`Error al registrar cliente: ${error.message}`)
         return
       }

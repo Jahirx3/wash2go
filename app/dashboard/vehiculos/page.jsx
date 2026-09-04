@@ -193,6 +193,26 @@ export default function VehiculosPage() {
         .single()
 
       if (error) {
+        if (error.code === '23505' || error.message?.includes('clientes_telefono_key')) {
+          const rawPhone = clienteForm.telefono.trim()
+          const digits = rawPhone.replace(/[^0-9]/g, '')
+
+          const { data: allClients } = await supabase.from('clientes').select('*')
+          const existing = allClients?.find(c => {
+            if (!c.telefono) return false
+            const cDigits = c.telefono.replace(/[^0-9]/g, '')
+            return c.telefono === rawPhone || cDigits === digits || (digits.length >= 8 && cDigits.endsWith(digits)) || (cDigits.length >= 8 && digits.endsWith(cDigits))
+          })
+
+          if (existing) {
+            toast.success(`El cliente "${existing.nombre}" con este teléfono ya existe. Se seleccionó automáticamente.`, { duration: 4000 })
+            setClientes(prev => prev.some(c => c.id === existing.id) ? prev : [existing, ...prev])
+            setFormData(prev => ({ ...prev, cliente_id: existing.id }))
+            setNuevoClienteModal(false)
+            setClienteForm({ nombre: '', telefono: '', email: '', direccion_default: '', notas: '' })
+            return
+          }
+        }
         toast.error(`Error al registrar cliente: ${error.message}`)
         return
       }

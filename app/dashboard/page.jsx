@@ -13,6 +13,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, AreaChart, Area
 } from 'recharts'
+import { getWhatsAppUrl } from '@/lib/utils'
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
@@ -433,9 +434,21 @@ export default function DashboardPage() {
                   <td>
                     <div>
                       <span className="font-semibold block text-slate-800 text-xs">{orden.cliente?.nombre || 'Cliente General'}</span>
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                        <Phone size={10} /> {orden.cliente?.telefono || 'Sin teléfono'}
-                      </span>
+                      {orden.cliente?.telefono ? (
+                        <a
+                          href={getWhatsAppUrl(orden.cliente.telefono, `¡Hola ${orden.cliente.nombre}! Te escribimos de Wash2Go autolavado sobre tu orden ${orden.numero}.`)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[11px] text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1 hover:underline"
+                          title="Contactar al cliente por WhatsApp"
+                        >
+                          <Phone size={10} /> {orden.cliente.telefono}
+                        </a>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                          <Phone size={10} /> Sin teléfono
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td>

@@ -3,13 +3,14 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Modal from '@/components/ui/Modal'
 import toast from 'react-hot-toast'
-import { UserCog, Plus, Shield, CheckCircle, XCircle, Trash2, Power, User } from 'lucide-react'
+import { UserCog, Plus, Shield, CheckCircle, XCircle, Trash2, Power, User, Edit2 } from 'lucide-react'
 
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState([])
   const [loading, setLoading] = useState(true)
 
   const [modalOpen, setModalOpen] = useState(false)
+  const [editingUsuario, setEditingUsuario] = useState(null)
   const [formData, setFormData] = useState({
     nombre: '',
     usuario: '',
@@ -17,6 +18,7 @@ export default function UsuariosPage() {
     telefono: '',
     password: '',
     rol: 'TRABAJADOR',
+    activo: true,
   })
 
   const fetchUsuarios = async () => {
@@ -45,6 +47,7 @@ export default function UsuariosPage() {
   }, [])
 
   const handleOpenModal = () => {
+    setEditingUsuario(null)
     setFormData({
       nombre: '',
       usuario: '',
@@ -52,30 +55,68 @@ export default function UsuariosPage() {
       telefono: '',
       password: '',
       rol: 'TRABAJADOR',
+      activo: true,
+    })
+    setModalOpen(true)
+  }
+
+  const handleOpenEditModal = (u) => {
+    setEditingUsuario(u)
+    setFormData({
+      nombre: u.nombre || '',
+      usuario: u.usuario || '',
+      email: u.email || '',
+      telefono: u.telefono || '',
+      password: '',
+      rol: u.rol || 'TRABAJADOR',
+      activo: u.activo !== undefined ? u.activo : true,
     })
     setModalOpen(true)
   }
 
   const handleSaveUsuario = async (e) => {
     e.preventDefault()
+    const toastId = toast.loading(editingUsuario ? 'Actualizando usuario...' : 'Creando usuario...')
     try {
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      })
-      const result = await res.json()
+      if (editingUsuario) {
+        const res = await fetch(`/api/usuarios/${editingUsuario.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        })
+        const result = await res.json()
 
-      if (!res.ok) {
-        toast.error(result.error || 'Error al registrar usuario')
-        return
+        if (!res.ok || !result.success) {
+          toast.dismiss(toastId)
+          toast.error(result.error || 'Error al actualizar usuario')
+          return
+        }
+
+        setUsuarios(usuarios.map(u => u.id === editingUsuario.id ? result.user : u))
+        toast.dismiss(toastId)
+        toast.success(`Usuario @${result.user.usuario} actualizado con éxito`)
+      } else {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        })
+        const result = await res.json()
+
+        if (!res.ok) {
+          toast.dismiss(toastId)
+          toast.error(result.error || 'Error al registrar usuario')
+          return
+        }
+
+        setUsuarios([...usuarios, result.user])
+        toast.dismiss(toastId)
+        toast.success(`Usuario @${result.user.usuario} creado con éxito`)
       }
-
-      setUsuarios([...usuarios, result.user])
-      toast.success(`Usuario @${result.user.usuario} creado con éxito`)
       setModalOpen(false)
     } catch (err) {
-      toast.error('Error al registrar usuario')
+      toast.dismiss(toastId)
+      toast.error('Error al guardar usuario')
     }
   }
 
@@ -183,6 +224,13 @@ export default function UsuariosPage() {
                   <td className="sticky-right text-center">
                     <div className="flex items-center justify-center gap-1">
                       <button
+                        onClick={() => handleOpenEditModal(u)}
+                        className="p-1.5 text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors"
+                        title="Modificar usuario"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      <button
                         onClick={() => handleToggleEstado(u.id, u.activo)}
                         className={`p-1.5 rounded-lg transition-colors ${u.activo ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}`}
                         title={u.activo ? 'Desactivar acceso' : 'Activar acceso'}
@@ -208,7 +256,7 @@ export default function UsuariosPage() {
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Crear Nuevo Usuario"
+        title={editingUsuario ? `Modificar Usuario: @${editingUsuario.usuario}` : "Crear Nuevo Usuario"}
       >
         <form onSubmit={handleSaveUsuario} className="space-y-4">
           <div>
@@ -273,16 +321,37 @@ export default function UsuariosPage() {
             </div>
           </div>
 
+          {editingUsuario && (
+            <div>
+              <label className="input-label">Estado de la Cuenta</label>
+              <select
+                value={formData.activo ? 'true' : 'false'}
+                onChange={(e) => setFormData({ ...formData, activo: e.target.value === 'true' })}
+                className="input-field cursor-pointer"
+              >
+                <option value="true">Activo (Habilitado para ingresar)</option>
+                <option value="false">Inactivo (Acceso bloqueado)</option>
+              </select>
+            </div>
+          )}
+
           <div>
-            <label className="input-label">Contraseña de Acceso *</label>
+            <label className="input-label">
+              {editingUsuario ? 'Nueva Contraseña (Opcional)' : 'Contraseña de Acceso *'}
+            </label>
             <input
               type="password"
-              required
+              required={!editingUsuario}
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               className="input-field"
-              placeholder="••••••••"
+              placeholder={editingUsuario ? 'Dejar en blanco para conservar la actual' : '••••••••'}
             />
+            {editingUsuario && (
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                Solo ingresa una contraseña si deseas cambiar la existente.
+              </span>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
@@ -290,7 +359,7 @@ export default function UsuariosPage() {
               Cancelar
             </button>
             <button type="submit" className="btn-primary">
-              Crear Usuario
+              {editingUsuario ? 'Guardar Modificaciones' : 'Crear Usuario'}
             </button>
           </div>
         </form>

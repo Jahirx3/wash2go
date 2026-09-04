@@ -8,6 +8,7 @@ import {
   Users, Plus, Search, Phone, MapPin,
   Car, Eye, Edit2, Trash2, Calendar, FileText, Droplets
 } from 'lucide-react'
+import { getWhatsAppUrl } from '@/lib/utils'
 
 export default function ClientesPage() {
   const [clientes, setClientes] = useState([])
@@ -124,7 +125,11 @@ export default function ClientesPage() {
           .select()
 
         if (error) {
-          toast.error(`Error al registrar cliente: ${error.message}`)
+          if (error.code === '23505' || error.message?.includes('clientes_telefono_key')) {
+            toast.error('Este número de teléfono ya está registrado a nombre de otro cliente.')
+          } else {
+            toast.error(`Error al registrar cliente: ${error.message}`)
+          }
           return
         }
 
@@ -295,14 +300,19 @@ export default function ClientesPage() {
                     </div>
                   </td>
                   <td>
-                    <a
-                      href={`https://wa.me/${cliente.telefono?.replace(/[^0-9]/g, '')}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs font-semibold text-emerald-600 hover:underline flex items-center gap-1"
-                    >
-                      <Phone size={12} /> {cliente.telefono}
-                    </a>
+                    {cliente.telefono ? (
+                      <a
+                        href={getWhatsAppUrl(cliente.telefono, `¡Hola ${cliente.nombre}! Te saludamos de Wash2Go Autolavado.`)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-semibold text-emerald-600 hover:underline flex items-center gap-1"
+                        title="Contactar al cliente por WhatsApp"
+                      >
+                        <Phone size={12} /> {cliente.telefono}
+                      </a>
+                    ) : (
+                      <span className="text-xs text-slate-400">Sin teléfono</span>
+                    )}
                   </td>
                   <td>
                     <span className="text-xs text-slate-600 flex items-center gap-1 truncate max-w-[200px]" title={cliente.direccion_default}>

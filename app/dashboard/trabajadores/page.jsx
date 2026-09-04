@@ -7,6 +7,7 @@ import {
   Truck, Plus, Phone, CheckCircle, Clock, MapPin,
   UserCheck, Shield, Trash2, Power, Edit2, AlertCircle, RefreshCw
 } from 'lucide-react'
+import { getWhatsAppUrl } from '@/lib/utils'
 
 export default function TrabajadoresPage() {
   const [trabajadores, setTrabajadores] = useState([])
@@ -297,14 +298,19 @@ export default function TrabajadoresPage() {
                 <div className="bg-slate-50/60 p-3 rounded-xl space-y-2 text-xs border border-slate-100">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500">Teléfono móvil</span>
-                    <a
-                      href={`https://wa.me/${t.telefono?.replace(/[^0-9]/g, '')}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-bold text-emerald-600 hover:underline flex items-center gap-1"
-                    >
-                      <Phone size={12} /> {t.telefono || 'Sin teléfono'}
-                    </a>
+                    {t.telefono ? (
+                      <a
+                        href={getWhatsAppUrl(t.telefono, `¡Hola ${t.nombre}! Te escribimos de la administración de Wash2Go.`)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-bold text-emerald-600 hover:underline flex items-center gap-1"
+                        title="Contactar al trabajador por WhatsApp"
+                      >
+                        <Phone size={12} /> {t.telefono}
+                      </a>
+                    ) : (
+                      <span className="text-slate-400 font-medium">Sin teléfono</span>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between">
